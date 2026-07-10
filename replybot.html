@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>欒老師課程回覆系統</title>
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Microsoft JhengHei", "Noto Sans TC", Arial, sans-serif;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #1a4f8b 0%, #2d7dd2 55%, #45b3e0 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    background: #ffffff;
+    width: 100%;
+    max-width: 520px;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .25);
+    overflow: hidden;
+  }
+  .card-header {
+    background: #1a4f8b;
+    color: #fff;
+    padding: 28px 36px;
+  }
+  .card-header h1 { font-size: 24px; letter-spacing: 1px; }
+  .card-header p { margin-top: 8px; font-size: 13px; opacity: .85; line-height: 1.6; }
+  .card-body { padding: 30px 36px 36px; }
+  .field { margin-bottom: 20px; }
+  .field label {
+    display: block;
+    font-size: 14px;
+    font-weight: bold;
+    color: #334;
+    margin-bottom: 6px;
+  }
+  .field label .req { color: #d64545; margin-left: 2px; }
+  .field label .opt { color: #999; font-weight: normal; font-size: 12px; margin-left: 6px; }
+  .field input, .field textarea {
+    width: 100%;
+    padding: 11px 14px;
+    border: 1.5px solid #d5dbe3;
+    border-radius: 8px;
+    font-size: 15px;
+    font-family: inherit;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .field input:focus, .field textarea:focus {
+    outline: none;
+    border-color: #2d7dd2;
+    box-shadow: 0 0 0 3px rgba(45, 125, 210, .15);
+  }
+  .field .err-text { color: #d64545; font-size: 12px; margin-top: 5px; }
+  .field input.invalid { border-color: #d64545; }
+  button.submit {
+    width: 100%;
+    padding: 14px;
+    background: #1a4f8b;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: background .15s, transform .1s;
+  }
+  button.submit:hover:not(:disabled) { background: #2d7dd2; }
+  button.submit:active:not(:disabled) { transform: scale(.985); }
+  button.submit:disabled { background: #9db6cf; cursor: not-allowed; }
+  .notice {
+    margin-top: 18px;
+    padding: 14px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  .notice.ok { background: #e8f6ee; border: 1px solid #7fce9f; color: #1c6b3c; }
+  .notice.fail { background: #fdeaea; border: 1px solid #eba0a0; color: #a03030; }
+  .spinner {
+    display: inline-block;
+    width: 15px; height: 15px;
+    border: 2px solid rgba(255,255,255,.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    vertical-align: -2px;
+    margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .footer-note { margin-top: 22px; font-size: 12px; color: #98a2ad; text-align: center; line-height: 1.7; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState } = React;
+
+const WEBHOOK_URL = "https://a3g.app.n8n.cloud/webhook/course-reply-intake";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function App() {
+  const [form, setForm] = useState({ email: "", name: "", jobTitle: "", topic: "" });
+  const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const update = (key) => (e) => {
+    setForm({ ...form, [key]: e.target.value });
+    if (errors[key]) setErrors({ ...errors, [key]: null });
+  };
+
+  const validate = () => {
+    const errs = {};
+    if (!EMAIL_RE.test(form.email.trim())) errs.email = "請輸入正確的 Email 格式";
+    if (!form.name.trim()) errs.name = "請填寫姓名";
+    if (!form.jobTitle.trim()) errs.jobTitle = "請填寫職稱";
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setResult(null);
+    if (!validate()) return;
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: form.email.trim(),
+          name: form.name.trim(),
+          jobTitle: form.jobTitle.trim(),
+          topic: form.topic.trim()
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setResult({ ok: true, msg: data.message || "已收到您的申請！確認信已寄出，研究報告完成後將寄送至您的信箱。" });
+        setForm({ email: "", name: "", jobTitle: "", topic: "" });
+      } else {
+        setResult({ ok: false, msg: data.message || "送出失敗，請稍後再試。" });
+      }
+    } catch (err) {
+      setResult({ ok: false, msg: "無法連線至伺服器，請確認網路後再試一次。" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <h1>欒老師課程回覆系統</h1>
+        <p>填寫您的資料與想蒐集資料的主題，系統會先寄送確認信，並在最新即時的研究報告完成後自動寄達您的信箱。</p>
+      </div>
+      <div className="card-body">
+        <form onSubmit={handleSubmit} noValidate>
+          <div className="field">
+            <label>Email<span className="req">＊</span></label>
+            <input
+              type="email"
+              className={errors.email ? "invalid" : ""}
+              placeholder="例如：name@example.com"
+              value={form.email}
+              onChange={update("email")}
+            />
+            {errors.email && <div className="err-text">{errors.email}</div>}
+          </div>
+          <div className="field">
+            <label>姓名<span className="req">＊</span></label>
+            <input
+              type="text"
+              className={errors.name ? "invalid" : ""}
+              placeholder="例如：王小明"
+              value={form.name}
+              onChange={update("name")}
+            />
+            {errors.name && <div className="err-text">{errors.name}</div>}
+          </div>
+          <div className="field">
+            <label>職稱<span className="req">＊</span></label>
+            <input
+              type="text"
+              className={errors.jobTitle ? "invalid" : ""}
+              placeholder="例如：教授、經理、研究生"
+              value={form.jobTitle}
+              onChange={update("jobTitle")}
+            />
+            {errors.jobTitle && <div className="err-text">{errors.jobTitle}</div>}
+          </div>
+          <div className="field">
+            <label>想蒐集資料的主題<span className="opt">（選填，未填寫將以預設主題產生報告）</span></label>
+            <textarea
+              rows="3"
+              placeholder="例如：生成式 AI 在高等教育的最新應用趨勢"
+              value={form.topic}
+              onChange={update("topic")}
+            />
+          </div>
+          <button type="submit" className="submit" disabled={submitting}>
+            {submitting ? (<span><span className="spinner"></span>送出中…</span>) : "送出申請"}
+          </button>
+        </form>
+        {result && (
+          <div className={"notice " + (result.ok ? "ok" : "fail")}>
+            {result.ok ? "✅ " : "⚠️ "}{result.msg}
+          </div>
+        )}
+        <div className="footer-note">
+          送出後請留意信箱（含垃圾郵件匣）。<br />
+          確認信會立即寄出，研究報告依佇列順序產生，通常數分鐘內完成。
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
